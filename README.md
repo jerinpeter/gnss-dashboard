@@ -28,47 +28,35 @@ background service and is viewed from any browser on the local network.
   cross-validated across multiple independent sessions), switches the
   receiver from Survey-In to Fixed mode at that exact position, so it stops
   re-estimating its own location on every power cycle.
-- **RTCM-over-WiFi relay** — replaces an XBee radio link with a WiFi path: the
-  Pi taps the RTCM3 stream it's already reading (zero impact on the
-  receiver's other output ports) and relays it over TCP to a small bridge
-  process on the rover's companion computer, which writes it straight into
-  the rover board's correction-input UART.
 
 Everything the dashboard/logging does is **read-only polling** against the
-receiver — it never issues a config `SET` except for the two deliberate,
-explicitly-confirmed actions described below, and both are scoped to avoid
-touching the base station's actual job of streaming corrections.
+receiver, with one deliberate exception: enabling `RXM-RAWX` auto-output at a
+precise clock-aligned rate (needed for clean raw logging — see below), scoped
+to the USB port only so it can never affect the base station's actual job of
+streaming corrections out its other ports. Switching to Fixed mode (last
+bullet above) is a manual, one-time operational step you take yourself once
+you have a trusted coordinate — not something this code does automatically.
 
 ## Hardware
 
 ```
-┌─────────────────┐  USB   ┌──────────────┐  RTCM3 (UART2 / WiFi)  ┌──────────────────┐
-│ u-blox ZED-F9P   ├────────┤ Raspberry Pi │────────────────────────┤ Rover ZED-F9P     │
-│ (base station)   │        │ (this repo)  │                        │ (RTK fusion       │
-└─────────────────┘        └──────────────┘                        │  on-chip)         │
-                                                                     └─────────┬─────────┘
-                                                                               │ USB (position)
-                                                                     ┌─────────▼─────────┐
-                                                                     │ Companion computer │
-                                                                     │ (ROS2 / robot stack)│
-                                                                     └────────────────────┘
+┌─────────────────┐  USB   ┌──────────────┐  RTCM3 (UART)   ┌──────────────────┐
+│ u-blox ZED-F9P   ├────────┤ Raspberry Pi │─────radio───────┤ Rover ZED-F9P     │
+│ (base station)   │        │ (this repo)  │   (e.g. XBee)   │ (RTK fusion       │
+└─────────────────┘        └──────────────┘                 │  on-chip)         │
 ```
 
 - Base station module connected to the Pi over USB only — the dashboard reads
   everything (UBX, NMEA, RTCM3) off this single connection.
-- RTCM3 corrections reach the rover either via a UART-connected radio link
-  (e.g. XBee) or via the WiFi relay in this repo, which delivers the exact
-  same bytes over the network instead.
+- RTCM3 corrections reach the rover over a separate UART-connected radio link
+  (e.g. XBee), independent of and unaffected by the Pi's USB connection.
 
 ## Repository layout
 
 ```
 server.py              Flask + WebSocket backend: serial reader, UBX/RTCM3
-                        parsing, raw logger, RTCM relay server, REST/WS API
+                        parsing, raw logger, REST/WS API
 static/                Dashboard frontend (HTML/CSS/JS, no build step)
-rtcm_bridge_thor.py     Rover-side bridge: WiFi → rover's correction-input UART
-rtcm-bridge.service     systemd unit for the bridge (runs on the rover's
-                        companion computer, not the base station Pi)
 requirements.txt        Python dependencies
 ```
 
@@ -116,23 +104,6 @@ sudo systemctl enable --now gnss-dashboard.service
 
 Needs `convbin` (from RTKLIB) on the `PATH` if you intend to convert raw logs
 to RINEX yourself: `sudo apt install rtklib`.
-
-### RTCM-over-WiFi bridge (rover's companion computer)
-
-1. Edit the constants at the top of `rtcm_bridge_thor.py`:
-   `PI_HOST` (the base station's IP), `DEVICE` (the serial device wired into
-   the rover's correction-input UART), `BAUD` (must match that UART's
-   configured baud rate).
-2. Copy the script and the systemd unit over, then:
-
-```bash
-sudo cp rtcm-bridge.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now rtcm-bridge.service
-```
-
-The relay server on the Pi side listens on port `5015` and needs no separate
-setup — it starts automatically with `server.py`.
 
 ## The OPUS / PPP workflow
 

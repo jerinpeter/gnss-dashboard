@@ -9,7 +9,6 @@ streaming RTCM corrections to a rover on its other ports - is never touched.
 import json
 import os
 import re
-import socket
 import subprocess
 import threading
 import time
@@ -107,7 +106,6 @@ class ReceiverState:
         self.clock = {}
         self.gnss_caps = {}
         self.nav_config = {}
-        self.rtcm_relay_clients = 0
         self.survey_history_count, self.last_svin_key = self._load_existing_survey_history()
         self.rtcm_stats = {}   # ident -> RollingRate
         self.msg_class_rates = {"UBX": RollingRate(), "NMEA": RollingRate(), "RTCM3": RollingRate()}
@@ -297,7 +295,6 @@ class ReceiverState:
                 "clock": self.clock,
                 "gnss_caps": self.gnss_caps,
                 "nav_config": self.nav_config,
-                "rtcm_relay_clients": self.rtcm_relay_clients,
                 "survey_history_count": self.survey_history_count,
                 "ports": self.ports,
                 "rtcm": rtcm_out,
@@ -562,47 +559,6 @@ def handle_ubx(parsed, ident):
             state.ports = ports
 
 
-RTCM_RELAY_PORT = 5015
-rtcm_clients = []
-rtcm_clients_lock = threading.Lock()
-
-
-def rtcm_relay_broadcast(raw_bytes):
-    """Forward a raw RTCM3 frame to every connected relay client (e.g. the
-    bridge process on the rover's Thor PC). Read-only tap on what's already
-    flowing through the reader loop - never touches receiver config."""
-    with rtcm_clients_lock:
-        if not rtcm_clients:
-            return
-        dead = []
-        for sock in rtcm_clients:
-            try:
-                sock.sendall(raw_bytes)
-            except OSError:
-                dead.append(sock)
-        for sock in dead:
-            rtcm_clients.remove(sock)
-            try:
-                sock.close()
-            except OSError:
-                pass
-        state.rtcm_relay_clients = len(rtcm_clients)
-
-
-def rtcm_relay_server_loop():
-    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    srv.bind(("0.0.0.0", RTCM_RELAY_PORT))
-    srv.listen(5)
-    print(f"RTCM3 relay listening on :{RTCM_RELAY_PORT}")
-    while True:
-        conn, addr = srv.accept()
-        print(f"RTCM3 relay client connected: {addr}")
-        with rtcm_clients_lock:
-            rtcm_clients.append(conn)
-            state.rtcm_relay_clients = len(rtcm_clients)
-
-
 def serial_reader_loop():
     while True:
         try:
@@ -625,7 +581,6 @@ def serial_reader_loop():
                         state.rtcm_stats[ident].hit()
                         state.msg_class_rates["RTCM3"].hit()
                         state.log_message("RTCM3", ident)
-                    rtcm_relay_broadcast(raw)
                 elif ident.startswith(("GN", "GP", "GL", "GA", "GB", "GQ", "GI")):
                     # NMEA arrives at ~30/s (split GSV sentences); too noisy for the
                     # console log, so it only counts toward the rate stat.
@@ -889,6 +844,5 @@ if __name__ == "__main__":
     enable_rawx_autoreport()
     threading.Thread(target=poller_loop, daemon=True).start()
     threading.Thread(target=system_stats_loop, daemon=True).start()
-    threading.Thread(target=rtcm_relay_server_loop, daemon=True).start()
     path = state.resume_or_start_rawlog(default_hours=96)
     app.run(host="0.0.0.0", port=5000, threaded=True)
