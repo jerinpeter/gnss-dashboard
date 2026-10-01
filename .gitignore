@@ -1,0 +1,13 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# GNSS raw data and OPUS submissions - large binary logs and/or contain the
+# base station's precise real-world coordinates; not meant for a public repo
+raw_logs/
+opus_submissions/
+
+# Misc
+*.log
+.DS_Store

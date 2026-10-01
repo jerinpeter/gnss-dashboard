@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RTK Base Station Monitor</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-glyph">◉</span>
+    <div class="brand-text">
+      <h1>RTK Base Station Monitor</h1>
+      <span id="receiverLine" class="muted">connecting&hellip;</span>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div id="connPill" class="pill pill-critical"><span class="dot"></span>OFFLINE</div>
+    <div class="stat-mini"><span class="muted">Uptime</span><span id="uptime">–</span></div>
+  </div>
+</header>
+
+<main class="grid">
+
+  <section class="card card-fix">
+    <h2>Fix Status</h2>
+    <div id="fixBadge" class="badge badge-lg">–</div>
+    <div class="kv-grid">
+      <div class="kv"><span class="k">Latitude</span><span id="lat" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Longitude</span><span id="lon" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Height (MSL)</span><span id="height" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Horiz. Accuracy</span><span id="hAcc" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Vert. Accuracy</span><span id="vAcc" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Satellites used</span><span id="numSV" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Speed</span><span id="speed" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Carrier solution</span><span id="carrSoln" class="v tab">–</span></div>
+    </div>
+  </section>
+
+  <section class="card card-time">
+    <h2>Time</h2>
+    <div id="utcClock" class="hero-figure tab">–</div>
+    <div class="kv-grid">
+      <div class="kv"><span class="k">UTC valid</span><span id="utcValid" class="v">–</span></div>
+      <div class="kv"><span class="k">Time accuracy</span><span id="tAcc" class="v tab">–</span></div>
+      <div class="kv"><span class="k">UTC standard</span><span id="utcStd" class="v">–</span></div>
+      <div class="kv"><span class="k">TTFF</span><span id="ttff" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Receiver uptime</span><span id="msss" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Clock bias</span><span id="clkBias" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Clock drift</span><span id="clkDrift" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Freq accuracy</span><span id="clkFAcc" class="v tab">–</span></div>
+    </div>
+  </section>
+
+  <section class="card card-svin">
+    <h2>Base Mode &amp; Survey-In</h2>
+    <div id="tmodeBadge" class="badge badge-lg">–</div>
+    <div class="progress-row">
+      <div class="progress-label"><span>Observation time</span><span id="durText" class="tab">–</span></div>
+      <div class="progress-track"><div id="durBar" class="progress-fill"></div></div>
+    </div>
+    <div class="progress-row">
+      <div class="progress-label"><span>Mean position accuracy</span><span id="accText" class="tab">–</span></div>
+      <div class="progress-track"><div id="accBar" class="progress-fill"></div></div>
+    </div>
+    <div class="kv-grid">
+      <div class="kv"><span class="k">Observations</span><span id="obs" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Survey valid</span><span id="svinValid" class="v">–</span></div>
+      <div class="kv" style="grid-column:1/-1"><span class="k">Independent surveys logged <span class="muted">(for comparing against OPUS)</span></span><span id="svinHistoryCount" class="v tab">–</span></div>
+    </div>
+  </section>
+
+  <section class="card card-sky">
+    <h2>Sky Plot <span id="satCount" class="muted"></span></h2>
+    <canvas id="skyplot" width="440" height="440"></canvas>
+    <div id="skyLegend" class="legend"></div>
+  </section>
+
+  <section class="card card-signal">
+    <h2>Signal Strength (C/N0) <span class="muted">click a satellite to highlight it</span></h2>
+    <div id="signalBars" class="signal-bars"></div>
+  </section>
+
+  <section class="card card-map">
+    <h2>Station Location</h2>
+    <div id="mapView"></div>
+    <div class="kv-grid" style="margin-top:12px">
+      <div class="kv"><span class="k">Fixed position</span><span id="mapCoords" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Accuracy circle</span><span id="mapAcc" class="v tab">–</span></div>
+    </div>
+  </section>
+
+  <section class="card card-rawlog">
+    <h2>Raw Observation Logging <span class="muted">for OPUS / PPP post-processing</span></h2>
+    <div id="rawlogBadge" class="badge badge-lg">–</div>
+    <div class="progress-row">
+      <div class="progress-label"><span>Session progress</span><span id="rawlogTimeText" class="tab">–</span></div>
+      <div class="progress-track"><div id="rawlogTimeBar" class="progress-fill"></div></div>
+    </div>
+    <div class="kv-grid">
+      <div class="kv"><span class="k">Epochs captured</span><span id="rawlogEpochs" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Log file size</span><span id="rawlogBytes" class="v tab">–</span></div>
+      <div class="kv" style="grid-column:1/-1"><span class="k">Log file</span><span id="rawlogPath" class="v tab" style="font-size:12.5px;word-break:break-all">–</span></div>
+    </div>
+  </section>
+
+  <section class="card card-console">
+    <h2>Message Console</h2>
+    <div id="console" class="console"></div>
+  </section>
+
+  <section class="card card-dop">
+    <h2>Dilution of Precision</h2>
+    <div class="dop-grid" id="dopGrid"></div>
+  </section>
+
+  <section class="card card-health">
+    <h2>Receiver Diagnostics</h2>
+    <div class="kv-grid">
+      <div class="kv"><span class="k">Antenna status</span><span id="antStatus" class="v">–</span></div>
+      <div class="kv"><span class="k">Antenna power</span><span id="antPower" class="v">–</span></div>
+      <div class="kv"><span class="k">Jamming state</span><span id="jamState" class="v">–</span></div>
+    </div>
+    <div class="progress-row">
+      <div class="progress-label"><span>Jamming indicator</span><span id="jamText" class="tab">–</span></div>
+      <div class="progress-track"><div id="jamBar" class="progress-fill"></div></div>
+    </div>
+    <div class="progress-row">
+      <div class="progress-label"><span>AGC level</span><span id="agcText" class="tab">–</span></div>
+      <div class="progress-track"><div id="agcBar" class="progress-fill"></div></div>
+    </div>
+    <div class="kv-grid">
+      <div class="kv"><span class="k">Noise per ms</span><span id="noise" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Anti-spoofing</span><span id="spoofState" class="v">–</span></div>
+      <div class="kv"><span class="k">RTC calibrated</span><span id="rtcCalib" class="v">–</span></div>
+      <div class="kv"><span class="k">Safe-boot triggered</span><span id="safeBoot" class="v">–</span></div>
+      <div class="kv"><span class="k">Crystal oscillator</span><span id="xtalAbsent" class="v">–</span></div>
+    </div>
+  </section>
+
+  <section class="card card-chip">
+    <h2>GPS Chip Resources <span class="muted">internal to the ZED-F9P, not the Pi</span></h2>
+    <div class="progress-row">
+      <div class="progress-label"><span>CPU load</span><span id="chipCpuText" class="tab">–</span></div>
+      <div class="progress-track"><div id="chipCpuBar" class="progress-fill"></div></div>
+    </div>
+    <div class="progress-row">
+      <div class="progress-label"><span>Memory usage</span><span id="chipMemText" class="tab">–</span></div>
+      <div class="progress-track"><div id="chipMemBar" class="progress-fill"></div></div>
+    </div>
+    <div class="progress-row">
+      <div class="progress-label"><span>I/O usage</span><span id="chipIoText" class="tab">–</span></div>
+      <div class="progress-track"><div id="chipIoBar" class="progress-fill"></div></div>
+    </div>
+    <div class="kv-grid">
+      <div class="kv"><span class="k">Die temperature</span><span id="chipTemp" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Boot type</span><span id="chipBoot" class="v">–</span></div>
+      <div class="kv"><span class="k">Firmware runtime</span><span id="chipRuntime" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Log: notice/warn/error</span><span id="chipLogs" class="v tab">–</span></div>
+    </div>
+  </section>
+
+  <section class="card card-navconfig">
+    <h2>Receiver Configuration</h2>
+    <div id="dynModelBadge" class="badge badge-lg">–</div>
+    <div class="kv-grid">
+      <div class="kv"><span class="k">Fix mode</span><span id="fixModeCfg" class="v">–</span></div>
+      <div class="kv"><span class="k">Elevation mask</span><span id="minElevCfg" class="v tab">–</span></div>
+      <div class="kv"><span class="k">PDOP / TDOP mask</span><span id="dopMaskCfg" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Pos / Time accuracy mask</span><span id="accMaskCfg" class="v tab">–</span></div>
+      <div class="kv"><span class="k">DGNSS timeout</span><span id="dgnssTimeoutCfg" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Max simultaneous GNSS</span><span id="simulCfg" class="v tab">–</span></div>
+      <div class="kv" style="grid-column:1/-1"><span class="k">Constellations enabled</span><span id="gnssEnabled" class="v">–</span></div>
+    </div>
+  </section>
+
+  <section class="card card-rf">
+    <h2>RF Front-End (per band)</h2>
+    <div id="rfBands" class="rf-bands"></div>
+  </section>
+
+  <section class="card card-spectrum">
+    <h2>RF Spectrum <span class="muted">live front-end sweep &mdash; spikes indicate interference</span></h2>
+    <canvas id="spectrumCanvas" width="900" height="220"></canvas>
+    <div id="spectrumLegend" class="legend"></div>
+  </section>
+
+  <section class="card card-pi">
+    <h2>Board Health <span class="muted">Raspberry Pi host</span></h2>
+    <div id="piThrottleBadge" class="badge badge-lg">–</div>
+    <div class="progress-row">
+      <div class="progress-label"><span>CPU</span><span id="piCpuText" class="tab">–</span></div>
+      <div class="progress-track"><div id="piCpuBar" class="progress-fill"></div></div>
+    </div>
+    <div class="progress-row">
+      <div class="progress-label"><span>Memory</span><span id="piMemText" class="tab">–</span></div>
+      <div class="progress-track"><div id="piMemBar" class="progress-fill"></div></div>
+    </div>
+    <div class="progress-row">
+      <div class="progress-label"><span>Disk (raw logs live here)</span><span id="piDiskText" class="tab">–</span></div>
+      <div class="progress-track"><div id="piDiskBar" class="progress-fill"></div></div>
+    </div>
+    <div class="progress-row">
+      <div class="progress-label"><span>CPU temperature</span><span id="piTempText" class="tab">–</span></div>
+      <div class="progress-track"><div id="piTempBar" class="progress-fill"></div></div>
+    </div>
+    <div class="kv-grid">
+      <div class="kv"><span class="k">Load average</span><span id="piLoad" class="v tab">–</span></div>
+      <div class="kv"><span class="k">Host uptime</span><span id="piUptime" class="v tab">–</span></div>
+    </div>
+  </section>
+
+  <section class="card card-rtcm">
+    <h2>RTCM3 Correction Output</h2>
+    <table class="data-table" id="rtcmTable">
+      <thead><tr><th>Type</th><th>Message</th><th>Rate</th><th>Count</th><th>Age</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section class="card card-ports">
+    <h2>Port I/O</h2>
+    <table class="data-table" id="portsTable">
+      <thead><tr><th>Port</th><th>Tx</th><th>Rx</th><th>Overruns</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section class="card card-footer">
+    <div class="stat-tile"><span class="stat-value" id="ubxRate">–</span><span class="stat-label">UBX msg/s</span></div>
+    <div class="stat-tile"><span class="stat-value" id="nmeaRate">–</span><span class="stat-label">NMEA msg/s</span></div>
+    <div class="stat-tile"><span class="stat-value" id="rtcmRate">–</span><span class="stat-label">RTCM3 msg/s</span></div>
+    <div class="stat-tile stat-wide"><span class="stat-value" id="fwInfo">–</span><span class="stat-label">Firmware</span></div>
+  </section>
+
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="app.js"></script>
+</body>
+</html>
